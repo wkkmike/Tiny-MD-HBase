@@ -24,12 +24,8 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import com.google.common.io.Closeables;
@@ -68,37 +64,42 @@ public class Index implements Closeable {
 
   private final int splitThreshold;
 
-  private final HTable dataTable;
+  private final Table dataTable;
 
-  private final HTable indexTable;
+  private final Table indexTable;
 
-  private final HBaseAdmin admin;
+  private final Admin admin;
 
   public Index(Configuration config, String tableName, int splitThreshold)
       throws IOException {
-    this.admin = new HBaseAdmin(config);
-    if (!admin.tableExists(tableName)) {
-      HTableDescriptor tdesc = new HTableDescriptor(tableName);
+    Connection connection = ConnectionFactory.createConnection(config);
+    this.admin = connection.getAdmin();
+    TableName tableTableName = TableName.valueOf(tableName);
+    if (!admin.tableExists(tableTableName)) {
+      HTableDescriptor tdesc = new HTableDescriptor(
+              TableName.valueOf(tableName));
       HColumnDescriptor cdesc = new HColumnDescriptor(Bucket.FAMILY);
       tdesc.addFamily(cdesc);
       admin.createTable(tdesc);
     }
-    dataTable = new HTable(config, tableName);
+    dataTable = connection.getTable(tableTableName);
 
     String indexName = tableName + "_index";
-    if (!admin.tableExists(indexName)) {
-      HTableDescriptor tdesc = new HTableDescriptor(indexName);
+    TableName indexTableName = TableName.valueOf(indexName);
+    if (!admin.tableExists(indexTableName)) {
+      HTableDescriptor tdesc = new HTableDescriptor(
+              TableName.valueOf(indexName));
       HColumnDescriptor cdesc = new HColumnDescriptor(Index.FAMILY_INFO);
       tdesc.addFamily(cdesc);
       admin.createTable(tdesc);
 
-      indexTable = new HTable(config, indexName);
+      indexTable = connection.getTable(indexTableName);
       Put put = new Put(Utils.bitwiseZip(0, 0));
       put.add(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(2));
       put.add(FAMILY_INFO, COLUMN_BUCKET_SIZE, Bytes.toBytes(0L));
       indexTable.put(put);
     } else {
-      indexTable = new HTable(config, indexName);
+      indexTable = connection.getTable(indexTableName);
     }
 
     this.splitThreshold = splitThreshold;
@@ -113,7 +114,12 @@ public class Index implements Closeable {
    * @throws IOException
    */
   public Bucket fetchBucket(byte[] row) throws IOException {
-    Result bucketEntry = indexTable.getRowOrBefore(row, FAMILY_INFO);
+    Scan scan = new Scan();
+    scan.setReversed(true);
+    scan.setStopRow(row);
+    scan.addFamily(FAMILY_INFO);
+    ResultScanner resultscanner = indexTable.getScanner(scan);
+    Result bucketEntry = resultscanner.next();
     byte[] bucketKey = bucketEntry.getRow();
     int prefixLength = Bytes.toInt(bucketEntry.getValue(FAMILY_INFO,
         COLUMN_PREFIX_LENGTH));
@@ -144,10 +150,15 @@ public class Index implements Closeable {
   public Iterable<Bucket> findBucketsInRange(Range rx, Range ry)
       throws IOException {
     byte[] probeKey = Utils.bitwiseZip(rx.min, ry.min);
-    Result bucketEntry = indexTable.getRowOrBefore(probeKey, FAMILY_INFO);
+    Scan scan = new Scan();
+    scan.setReversed(true);
+    scan.setStopRow(probeKey);
+    scan.addFamily(FAMILY_INFO);
+    ResultScanner resultscanner = indexTable.getScanner(scan);
+    Result bucketEntry = resultscanner.next();
     byte[] startKey = bucketEntry.getRow();
     byte[] stopKey = Bytes.incrementBytes(Utils.bitwiseZip(rx.max, ry.max), 1L);
-    Scan scan = new Scan(startKey, stopKey);
+    scan = new Scan(startKey, stopKey);
     scan.addFamily(FAMILY_INFO);
     scan.setCaching(1000);
     ResultScanner results = indexTable.getScanner(scan);
@@ -173,7 +184,12 @@ public class Index implements Closeable {
    * @throws IOException
    */
   void notifyInsertion(byte[] row) throws IOException {
-    Result bucketEntry = indexTable.getRowOrBefore(row, FAMILY_INFO);
+    Scan scan = new Scan();
+    scan.setReversed(true);
+    scan.setStopRow(row);
+    scan.addFamily(FAMILY_INFO);
+    ResultScanner resultscanner = indexTable.getScanner(scan);
+    Result bucketEntry = resultscanner.next();
     byte[] bucketKey = bucketEntry.getRow();
     long size = indexTable.incrementColumnValue(bucketKey, FAMILY_INFO,
         COLUMN_BUCKET_SIZE, 1L);
@@ -191,7 +207,12 @@ public class Index implements Closeable {
    * [abc1****].
    */
   private void splitBucket(byte[] splitKey) throws IOException {
-    Result bucketEntry = indexTable.getRowOrBefore(splitKey, FAMILY_INFO);
+    Scan scan = new Scan();
+    scan.setReversed(true);
+    scan.setStopRow(splitKey);
+    scan.addFamily(FAMILY_INFO);
+    ResultScanner resultscanner = indexTable.getScanner(scan);
+    Result bucketEntry = resultscanner.next();
     byte[] bucketKey = bucketEntry.getRow();
     int prefixLength = Bytes.toInt(bucketEntry.getValue(FAMILY_INFO,
         COLUMN_PREFIX_LENGTH));
@@ -204,7 +225,7 @@ public class Index implements Closeable {
 
     byte[] newChildKey0 = bucketKey;
     byte[] newChildKey1 = Utils.makeBit(bucketKey, prefixLength);
-    Scan scan = new Scan(newChildKey0, newChildKey1);
+    scan = new Scan(newChildKey0, newChildKey1);
     scan.addFamily(Bucket.FAMILY);
     scan.setCaching(1000);
     ResultScanner results = dataTable.getScanner(scan);
@@ -215,11 +236,11 @@ public class Index implements Closeable {
     }
 
     Put put0 = new Put(newChildKey0);
-    put0.add(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(newPrefixLength));
-    put0.add(FAMILY_INFO, COLUMN_BUCKET_SIZE, Bytes.toBytes(newSize));
+    put0.addColumn(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(newPrefixLength));
+    put0.addColumn(FAMILY_INFO, COLUMN_BUCKET_SIZE, Bytes.toBytes(newSize));
     Put put1 = new Put(newChildKey1);
-    put1.add(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(newPrefixLength));
-    put1.add(FAMILY_INFO, COLUMN_BUCKET_SIZE,
+    put1.addColumn(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(newPrefixLength));
+    put1.addColumn(FAMILY_INFO, COLUMN_BUCKET_SIZE,
         Bytes.toBytes(bucketSize - newSize));
     List<Put> puts = new ArrayList<Put>(2);
     puts.add(put0);

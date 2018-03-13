@@ -28,10 +28,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.client.HBaseAdmin;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.util.Bytes;
 
 import com.google.common.collect.Iterables;
@@ -202,7 +200,8 @@ public class Client implements Closeable {
             new Range(ymin, ymax));
         System.out.println(String.format("%d hits", Iterables.size(points)));
       } else if (args[0].equals("index")) {
-        HTable index = new HTable("Sample_index");
+        Connection connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
+        Table index = connection.getTable(TableName.valueOf("Sample_index"));
         System.out.println("bucket name: size");
         ResultScanner entries = index.getScanner(Index.FAMILY_INFO);
         for (Result entry : entries) {
@@ -216,11 +215,12 @@ public class Client implements Closeable {
         }
       } else if (args[0].equals("drop")) {
         client.close();
-        HBaseAdmin admin = new HBaseAdmin(HBaseConfiguration.create());
-        admin.disableTable("Sample_index");
-        admin.deleteTable("Sample_index");
-        admin.disableTable("Sample");
-        admin.deleteTable("Sample");
+        Connection connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
+        Admin admin = connection.getAdmin();
+        admin.disableTable(TableName.valueOf("Sample_index"));
+        admin.deleteTable(TableName.valueOf("Sample_index"));
+        admin.disableTable(TableName.valueOf("Sample"));
+        admin.deleteTable(TableName.valueOf("Sample"));
         admin.close();
       } else {
         showHelp();

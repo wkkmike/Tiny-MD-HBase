@@ -24,12 +24,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
 
-import org.apache.hadoop.hbase.client.Get;
-import org.apache.hadoop.hbase.client.HTable;
-import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -53,14 +48,14 @@ public class Bucket {
 
   public static byte[] FAMILY = "P".getBytes();
 
-  private final HTable dataTable;
+  private final Table dataTable;
   private final byte[] startRow;
   private final byte[] stopRow;
   private final Index index;
   private final Range rangeX;
   private final Range rangeY;
 
-  public Bucket(HTable dataTable, Range rx, Range ry, Index index) {
+  public Bucket(Table dataTable, Range rx, Range ry, Index index) {
     checkNotNull(dataTable);
     checkNotNull(rx);
     checkNotNull(ry);
@@ -75,7 +70,7 @@ public class Bucket {
 
   public void insert(byte[] row, Point p) throws IOException {
     Put put = new Put(row);
-    put.add(FAMILY, toQualifier(p), toValue(p));
+    put.addColumn(FAMILY, toQualifier(p), toValue(p));
     dataTable.put(put);
     index.notifyInsertion(row);
   }

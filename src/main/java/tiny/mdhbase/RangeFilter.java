@@ -19,7 +19,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Bytes;
 
@@ -46,7 +49,7 @@ public class RangeFilter extends FilterBase {
    * 
    * @see org.apache.hadoop.io.Writable#readFields(java.io.DataInput)
    */
-  @Override
+
   public void readFields(DataInput in) throws IOException {
     int xmin = in.readInt();
     int xmax = in.readInt();
@@ -62,7 +65,7 @@ public class RangeFilter extends FilterBase {
    * 
    * @see org.apache.hadoop.io.Writable#write(java.io.DataOutput)
    */
-  @Override
+
   public void write(DataOutput out) throws IOException {
     out.writeInt(rx.min);
     out.writeInt(rx.max);
@@ -77,9 +80,9 @@ public class RangeFilter extends FilterBase {
    * org.apache.hadoop.hbase.filter.FilterBase#filterKeyValue(org.apache.hadoop
    * .hbase.KeyValue)
    */
-  @Override
-  public ReturnCode filterKeyValue(KeyValue kv) {
-    byte[] value = kv.getValue();
+
+  public ReturnCode filterKeyValue(Cell cell) throws IOException {
+    byte[] value = CellUtil.cloneValue(cell);
     int x = Bytes.toInt(value, 0);
     int y = Bytes.toInt(value, 4);
     if (rx.include(x) && ry.include(y)) {
@@ -88,5 +91,4 @@ public class RangeFilter extends FilterBase {
       return ReturnCode.NEXT_ROW;
     }
   }
-
 }
