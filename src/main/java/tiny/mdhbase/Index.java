@@ -116,7 +116,7 @@ public class Index implements Closeable {
   public Bucket fetchBucket(byte[] row) throws IOException {
     Scan scan = new Scan();
     scan.setReversed(true);
-    scan.setStopRow(row);
+    scan.setStartRow(row);
     scan.addFamily(FAMILY_INFO);
     ResultScanner resultscanner = indexTable.getScanner(scan);
     Result bucketEntry = resultscanner.next();
@@ -152,7 +152,7 @@ public class Index implements Closeable {
     byte[] probeKey = Utils.bitwiseZip(rx.min, ry.min);
     Scan scan = new Scan();
     scan.setReversed(true);
-    scan.setStopRow(probeKey);
+    scan.setStartRow(probeKey);
     scan.addFamily(FAMILY_INFO);
     ResultScanner resultscanner = indexTable.getScanner(scan);
     Result bucketEntry = resultscanner.next();
@@ -186,7 +186,7 @@ public class Index implements Closeable {
   void notifyInsertion(byte[] row) throws IOException {
     Scan scan = new Scan();
     scan.setReversed(true);
-    scan.setStopRow(row);
+    scan.setStartRow(row);
     scan.addFamily(FAMILY_INFO);
     ResultScanner resultscanner = indexTable.getScanner(scan);
     Result bucketEntry = resultscanner.next();
@@ -209,7 +209,7 @@ public class Index implements Closeable {
   private void splitBucket(byte[] splitKey) throws IOException {
     Scan scan = new Scan();
     scan.setReversed(true);
-    scan.setStopRow(splitKey);
+    scan.setStartRow(splitKey);
     scan.addFamily(FAMILY_INFO);
     ResultScanner resultscanner = indexTable.getScanner(scan);
     Result bucketEntry = resultscanner.next();
