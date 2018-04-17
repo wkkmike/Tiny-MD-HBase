@@ -38,10 +38,12 @@ public class RangeFilter extends FilterBase {
 
   private Range rx;
   private Range ry;
+  private Range rt;
 
-  public RangeFilter(Range rx, Range ry) {
+  public RangeFilter(Range rx, Range ry, Range rt) {
     this.rx = rx;
     this.ry = ry;
+    this.rt = rt;
   }
 
   /*

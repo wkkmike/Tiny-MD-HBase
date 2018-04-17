@@ -25,14 +25,17 @@ public class Point {
   public final long id;
   public final int x;
   public final int y;
+  public final int t;
 
-  public Point(long id, int x, int y) {
+  public Point(long id, int x, int y, int t) {
     checkArgument(0 <= x);
     checkArgument(0 <= y);
+    checkArgument(0 <= t);
 
     this.id = id;
     this.x = x;
     this.y = y;
+    this.t = t;
   }
 
   public double distanceFrom(Point that) {
@@ -48,7 +51,7 @@ public class Point {
    */
   @Override
   public String toString() {
-    return String.format("[%d, (%d,%d)]", id, x, y);
+    return String.format("[%d, (%d,%d,%d)]", id, x, y, t);
   }
 
 }

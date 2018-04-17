@@ -54,17 +54,20 @@ public class Bucket {
   private final Index index;
   private final Range rangeX;
   private final Range rangeY;
+  private final Range rangeT;
 
-  public Bucket(Table dataTable, Range rx, Range ry, Index index) {
+  public Bucket(Table dataTable, Range rx, Range ry, Range rt, Index index) {
     checkNotNull(dataTable);
     checkNotNull(rx);
     checkNotNull(ry);
+    checkNotNull(rt);
     checkNotNull(index);
     this.dataTable = dataTable;
     this.rangeX = rx;
     this.rangeY = ry;
-    this.startRow = Utils.bitwiseZip(rx.min, ry.min);
-    this.stopRow = Bytes.incrementBytes(Utils.bitwiseZip(rx.max, ry.max), 1L);
+    this.rangeT = rt;
+    this.startRow = Utils3D.bitwiseZip(rx.min, ry.min, rt.min);
+    this.stopRow = Bytes.incrementBytes(Utils3D.bitwiseZip(rx.max, ry.max, rt.max), 1L);
     this.index = index;
   }
 
@@ -102,9 +105,9 @@ public class Bucket {
    * @return a collection of points within the query region
    * @throws IOException
    */
-  public Collection<Point> scan(Range rx, Range ry) throws IOException {
+  public Collection<Point> scan(Range rx, Range ry, Range rt) throws IOException {
     Scan scan = new Scan(startRow, stopRow);
-    Filter filter = new RangeFilter(rx, ry);
+    Filter filter = new RangeFilter(rx, ry, rt);
     scan.setFilter(filter);
     scan.setCaching(1000);
     ResultScanner scanner = dataTable.getScanner(scan);
@@ -116,7 +119,7 @@ public class Bucket {
   }
 
   public Collection<Point> scan() throws IOException {
-    return scan(rangeX, rangeY);
+    return scan(rangeX, rangeY, rangeT);
   }
 
   private void transformResultAndAddToList(Result result, List<Point> found) {
@@ -134,14 +137,16 @@ public class Bucket {
   private byte[] toValue(Point p) {
     byte[] bx = Bytes.toBytes(p.x);
     byte[] by = Bytes.toBytes(p.y);
-    return Utils.concat(bx, by);
+    byte[] bt = Bytes.toBytes(p.t);
+    return Utils3D.concat(bx, by, bt);
   }
 
   private Point toPoint(byte[] qualifier, byte[] value) {
     long id = Bytes.toLong(qualifier);
     int x = Bytes.toInt(value, 0);
     int y = Bytes.toInt(value, 4);
-    return new Point(id, x, y);
+    int t = Bytes.toInt(value, 4);
+    return new Point(id, x, y, t);
   }
 
   public double distanceFrom(Point point) {
@@ -153,7 +158,7 @@ public class Bucket {
   public Point farthestCornerFrom(Point point) {
     final int DUMMY = -1;
     return new Point(DUMMY, rangeX.farthestFrom(point.x),
-        rangeY.farthestFrom(point.y));
+        rangeY.farthestFrom(point.y), rangeT.farthestFrom(point.t));
   }
 
   /*
@@ -163,7 +168,7 @@ public class Bucket {
    */
   @Override
   public String toString() {
-    return String.format("Bucket[(%d,%d), (%d,%d)]", rangeX.min, rangeY.min,
-        rangeX.max, rangeY.max);
+    return String.format("Bucket[(%d,%d,%d), (%d,%d,%d)]", rangeX.min, rangeY.min, rangeT.min,
+        rangeX.max, rangeY.max, rangeT.max);
   }
 }

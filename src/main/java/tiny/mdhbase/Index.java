@@ -94,8 +94,8 @@ public class Index implements Closeable {
       admin.createTable(tdesc);
 
       indexTable = connection.getTable(indexTableName);
-      Put put = new Put(Utils.bitwiseZip(0, 0));
-      put.add(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(2));
+      Put put = new Put(Utils3D.bitwiseZip(0, 0, 0));
+      put.add(FAMILY_INFO, COLUMN_PREFIX_LENGTH, Bytes.toBytes(3));
       put.add(FAMILY_INFO, COLUMN_BUCKET_SIZE, Bytes.toBytes(0L));
       indexTable.put(put);
     } else {
@@ -128,14 +128,15 @@ public class Index implements Closeable {
   }
 
   private Range[] toRanges(byte[] bucketKey, int prefixLength) {
-    byte[] suffix_ones = Utils.not(Utils.makeMask(prefixLength));
+    byte[] suffix_ones = Utils3D.not(Utils3D.makeMask(prefixLength));
     // substitute don't cares to 0s. ex. [010*****] -> [01000000]
-    int[] mins = Utils.bitwiseUnzip(bucketKey);
+    int[] mins = Utils3D.bitwiseUnzip(bucketKey);
     // substitute don't cares to 1s. ex. [010*****] -> [01011111]
-    int[] maxs = Utils.bitwiseUnzip(Utils.or(bucketKey, suffix_ones));
-    Range[] ranges = new Range[2];
+    int[] maxs = Utils3D.bitwiseUnzip(Utils3D.or(bucketKey, suffix_ones));
+    Range[] ranges = new Range[3];
     ranges[0] = new Range(mins[0], maxs[0]);
     ranges[1] = new Range(mins[1], maxs[1]);
+    ranges[2] = new Range(mins[2], maxs[2]);
     return ranges;
   }
 
@@ -147,9 +148,9 @@ public class Index implements Closeable {
    * @return
    * @throws IOException
    */
-  public Iterable<Bucket> findBucketsInRange(Range rx, Range ry)
+  public Iterable<Bucket> findBucketsInRange(Range rx, Range ry, Range rt)
       throws IOException {
-    byte[] probeKey = Utils.bitwiseZip(rx.min, ry.min);
+    byte[] probeKey = Utils3D.bitwiseZip(rx.min, ry.min, rt.min);
     Scan scan = new Scan();
     scan.setReversed(true);
     scan.setStartRow(probeKey);
@@ -157,7 +158,7 @@ public class Index implements Closeable {
     ResultScanner resultscanner = indexTable.getScanner(scan);
     Result bucketEntry = resultscanner.next();
     byte[] startKey = bucketEntry.getRow();
-    byte[] stopKey = Bytes.incrementBytes(Utils.bitwiseZip(rx.max, ry.max), 1L);
+    byte[] stopKey = Bytes.incrementBytes(Utils3D.bitwiseZip(rx.max, ry.max, rt.max), 1L);
     scan = new Scan(startKey, stopKey);
     scan.addFamily(FAMILY_INFO);
     scan.setCaching(1000);
@@ -167,7 +168,7 @@ public class Index implements Closeable {
       byte[] row = result.getRow();
       int pl = Bytes.toInt(result.getValue(FAMILY_INFO, COLUMN_PREFIX_LENGTH));
       Range[] rs = toRanges(row, pl);
-      if (rx.intersect(rs[0]) && ry.intersect(rs[1])) {
+      if (rx.intersect(rs[0]) && ry.intersect(rs[1]) && rt.intersect(rs[2])) {
         hitBuckets.add(createBucket(rs));
       }
     }
@@ -175,7 +176,7 @@ public class Index implements Closeable {
   }
 
   private Bucket createBucket(Range[] rs) {
-    return new Bucket(dataTable, rs[0], rs[1], this);
+    return new Bucket(dataTable, rs[0], rs[1], rs[2], this);
   }
 
   /**
@@ -219,12 +220,12 @@ public class Index implements Closeable {
     long bucketSize = Bytes.toLong(bucketEntry.getValue(FAMILY_INFO,
         COLUMN_BUCKET_SIZE));
     int newPrefixLength = prefixLength + 1;
-    if (newPrefixLength > 32 * 2) {
+    if (newPrefixLength > 32 * 3) {
       return; // exceeds the maximum prefix length.
     }
 
     byte[] newChildKey0 = bucketKey;
-    byte[] newChildKey1 = Utils.makeBit(bucketKey, prefixLength);
+    byte[] newChildKey1 = Utils3D.makeBit(bucketKey, prefixLength);
     scan = new Scan(newChildKey0, newChildKey1);
     scan.addFamily(Bucket.FAMILY);
     scan.setCaching(1000);

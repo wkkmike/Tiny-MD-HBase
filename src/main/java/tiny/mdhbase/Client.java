@@ -51,13 +51,13 @@ public class Client implements Closeable {
   }
 
   public void insert(Point p) throws IOException {
-    byte[] row = Utils.bitwiseZip(p.x, p.y);
+    byte[] row = Utils3D.bitwiseZip(p.x, p.y, p.t);
     Bucket bucket = index.fetchBucket(row);
     bucket.insert(row, p);
   }
 
-  public Iterable<Point> get(int x, int y) throws IOException {
-    byte[] row = Utils.bitwiseZip(x, y);
+  public Iterable<Point> get(int x, int y, int t) throws IOException {
+    byte[] row = Utils3D.bitwiseZip(x, y, t);
     Bucket bucket = index.fetchBucket(row);
     return bucket.get(row);
   }
@@ -71,11 +71,11 @@ public class Client implements Closeable {
    * @return points within the query region
    * @throws IOException
    */
-  public Iterable<Point> rangeQuery(Range rx, Range ry) throws IOException {
-    Iterable<Bucket> buckets = index.findBucketsInRange(rx, ry);
+  public Iterable<Point> rangeQuery(Range rx, Range ry, Range rt) throws IOException {
+    Iterable<Bucket> buckets = index.findBucketsInRange(rx, ry, rt);
     List<Point> results = new LinkedList<Point>();
     for (Bucket bucket : buckets) {
-      results.addAll(bucket.scan(rx, ry));
+      results.addAll(bucket.scan(rx, ry, rt));
     }
     return results;
   }
@@ -115,7 +115,7 @@ public class Client implements Closeable {
     do {
       Iterable<Bucket> buckets = index.findBucketsInRange(new Range(point.x
           - offset, point.x + offset), new Range(point.y - offset, point.y
-          + offset));
+          + offset), new Range(point.t - offset, point.t + offset));
 
       for (Bucket bucket : buckets) {
         if (!scannedBucketNames.contains(bucket.toString())) {
@@ -172,20 +172,22 @@ public class Client implements Closeable {
         showHelp();
       } else if (args[0].equals("put")) {
         int id;
-        if (args.length < 4) {
+        if (args.length < 5) {
           Random idGenerator = new Random(System.nanoTime());
           id = idGenerator.nextInt();
         } else {
-          id = Integer.parseInt(args[3]);
+          id = Integer.parseInt(args[4]);
         }
         int x = Integer.parseInt(args[1]);
         int y = Integer.parseInt(args[2]);
-        Point p = new Point(id, x, y);
+        int t = Integer.parseInt(args[3]);
+        Point p = new Point(id, x, y, t);
         client.insert(p);
       } else if (args[0].equals("get")) {
         int x = Integer.parseInt(args[1]);
         int y = Integer.parseInt(args[2]);
-        Iterable<Point> points = client.get(x, y);
+        int t = Integer.parseInt(args[3]);
+        Iterable<Point> points = client.get(x, y, t);
         for (Point point : points) {
           System.out.println(point);
         }
@@ -194,10 +196,12 @@ public class Client implements Closeable {
         int ymin = Integer.parseInt(args[2]);
         int xmax = Integer.parseInt(args[3]);
         int ymax = Integer.parseInt(args[4]);
-        System.out.println(String.format("Query Region: [(%d,%d), (%d,%d)]",
-            xmin, ymin, xmax, ymax));
+        int tmin = Integer.parseInt(args[5]);
+        int tmax = Integer.parseInt(args[6]);
+        System.out.println(String.format("Query Region: [(%d,%d), (%d,%d), (%d, %d)]",
+            xmin, ymin, xmax, ymax, tmin, tmax));
         Iterable<Point> points = client.rangeQuery(new Range(xmin, xmax),
-            new Range(ymin, ymax));
+            new Range(ymin, ymax), new Range(tmin, tmax));
         System.out.println(String.format("%d hits", Iterables.size(points)));
       } else if (args[0].equals("index")) {
         Connection connection = ConnectionFactory.createConnection(HBaseConfiguration.create());
@@ -211,7 +215,7 @@ public class Client implements Closeable {
           long bucketSize = Bytes.toLong(entry.getValue(Index.FAMILY_INFO,
               Index.COLUMN_BUCKET_SIZE));
           System.out.println(String.format("%s: %d",
-              Utils.toString(key, prefixLength), bucketSize));
+              Utils3D.toString(key, prefixLength), bucketSize));
         }
       } else if (args[0].equals("drop")) {
         client.close();
