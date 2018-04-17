@@ -43,19 +43,19 @@ Start HBase.
 > bin/start-hbase.sh
 
 
-Put an entity at (x,y).
-> bin/hbase tiny.mdhbase.Client put x y
+Put an entity at (x,y,t).
+> bin/hbase tiny.mdhbase.Client put x y t
 
 Tiny MD-HBase only supports non-negative coordinates. Choose non-negative integers
 for x and y. 'put' automatically generates entityID if you omit an ID.
 If you want to specify entity ID, type
-> bin/hbase tiny.mdhbase.Client put x y id
+> bin/hbase tiny.mdhbase.Client put x y t id
 
-Now you put an entity at (x,y). Check entities at (x,y).
-> bin/hbase tiny.mdhbase.Client get x y
-[entityID, (x,y)]
+Now you put an entity at (x,y,t). Check entities at (x,y,t).
+> bin/hbase tiny.mdhbase.Client get x y t
+[entityID, (x,y,t)]
 
-'get' prints all entities at (x,y). In other word, 'get' is a point 
+'get' prints all entities at (x,y,t). In other word, 'get' is a point 
 query that retrieves all entities at the query point.
 
 
@@ -67,8 +67,8 @@ The default split threshold is 10. If you put more than 10 entities, you will
 observe a bucket split. 
 
 Let's try multi-dimensional range queries.
-'count' prints the number of points within region (xmin, ymin)-(xmax, ymax).
-> bin/hbase tiny.mdhbase.Client count xmin ymin xmax ymax
+'count' prints the number of points within region (xmin, ymin, tmin)-(xmax, ymax, tmax).
+> bin/hbase tiny.mdhbase.Client count xmin ymin tmin xmax ymax tmax
 
 
 If you want to reset all entries, drop the table.
